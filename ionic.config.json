@@ -1,0 +1,7 @@
+{
+  "name": "rifas-ctph-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
