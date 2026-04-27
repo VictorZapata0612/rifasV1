@@ -48,7 +48,7 @@
         <p class="ion-text-muted ion-margin-top">Calculando boletas disponibles...</p>
       </div>
 
-      <div v-else-if="allBoletas.length === 0 && !loading" class="ion-text-center ion-padding">
+      <div v-else-if="totalDisponibles === 0 && !loading" class="ion-text-center ion-padding">
         <ion-icon :icon="ticketOutline" style="font-size: 64px; color: var(--ion-color-medium);"></ion-icon>
         <p class="ion-text-muted">¡Felicidades! Todas las boletas han sido asignadas.</p>
       </div>
@@ -79,70 +79,104 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonList, IonItem, IonLabel, IonIcon, IonBadge, IonSpinner, IonListHeader, IonRefresher, IonRefresherContent, IonCard, IonCardHeader, IonCardTitle, IonCardContent, IonGrid, IonRow, IonCol, IonInfiniteScroll, IonInfiniteScrollContent } from '@ionic/vue';
 import { ticketOutline } from 'ionicons/icons';
 import { db } from '../firebase/config';
-import { collection, query, onSnapshot, where, Unsubscribe } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, Unsubscribe, limit, startAfter, getDocs, doc, getCountFromServer, where } from 'firebase/firestore';
 
-const allBoletas = ref<{ numero: string, id: string }[]>([]); // Todas las disponibles (en memoria)
 const displayedBoletas = ref<{ numero: string, id: string }[]>([]); // Solo las visibles
 const loading = ref(false);
 const totalAsignadas = ref(0);
 const totalDisponibles = ref(0);
 const TOTAL_BOLETAS = 10000;
 const PAGE_SIZE = 50;
-let currentPage = 0;
-let unsubscribe: Unsubscribe | null = null;
+const allLoaded = ref(false);
+let lastVisible: any = null;
+let unsubscribeDisponibles: Unsubscribe | null = null;
+let unsubscribeStats: Unsubscribe | null = null;
+let fallbackHydrated = false;
 
-const allLoaded = computed(() => displayedBoletas.value.length >= allBoletas.value.length);
+const totalMostrado = computed(() => displayedBoletas.value.length);
+
+const hydrateStatsFromAssignedCount = async () => {
+  if (fallbackHydrated) return;
+  fallbackHydrated = true;
+
+  const assignedQ = query(collection(db, 'boletas'), where('estado', '==', 'asignada'));
+  const countSnap = await getCountFromServer(assignedQ);
+  const assigned = countSnap.data().count;
+
+  totalAsignadas.value = assigned;
+  totalDisponibles.value = Math.max(0, TOTAL_BOLETAS - assigned);
+};
 
 const iniciarListener = () => {
   loading.value = true;
-  
-  // 1. Escuchar cambios en boletas asignadas en tiempo real
-  const q = query(collection(db, 'boletas'), where('estado', '==', 'asignada'));
-  
-  unsubscribe = onSnapshot(q, (snapshot) => {
-    const assignedNumbers = new Set(snapshot.docs.map(doc => doc.data().numero));
-    
-    totalAsignadas.value = assignedNumbers.size;
-    
-    // 2. Recalcular disponibles en memoria
-    const disponibles = [];
-    for (let i = 0; i < TOTAL_BOLETAS; i++) {
-      const numeroStr = i.toString().padStart(4, '0');
-      if (!assignedNumbers.has(numeroStr)) {
-        disponibles.push({ numero: numeroStr, id: numeroStr });
-      }
-    }
-    
-    allBoletas.value = disponibles;
-    totalDisponibles.value = disponibles.length;
 
-    // 3. Actualizar vista manteniendo la cantidad de items visibles (o cargar primera página)
-    const currentCount = displayedBoletas.value.length > 0 ? displayedBoletas.value.length : PAGE_SIZE;
-    displayedBoletas.value = allBoletas.value.slice(0, currentCount);
-    
-    // Ajustar paginación
-    currentPage = Math.ceil(displayedBoletas.value.length / PAGE_SIZE);
-    
+  displayedBoletas.value = [];
+  allLoaded.value = false;
+  lastVisible = null;
+
+  const disponiblesQ = query(
+    collection(db, 'boletas_disponibles'),
+    orderBy('numero', 'asc'),
+    limit(PAGE_SIZE)
+  );
+
+  unsubscribeDisponibles = onSnapshot(disponiblesQ, (snapshot) => {
+    displayedBoletas.value = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    allLoaded.value = snapshot.docs.length < PAGE_SIZE;
     loading.value = false;
   }, (error) => {
     console.error("Error en listener de disponibles:", error);
     loading.value = false;
   });
+
+  unsubscribeStats = onSnapshot(doc(db, 'stats', 'inventario'), (snapshot) => {
+    if (!snapshot.exists()) {
+      void hydrateStatsFromAssignedCount();
+      return;
+    }
+
+    const data = snapshot.data();
+    totalAsignadas.value = data.totalAsignadas || 0;
+    totalDisponibles.value = data.totalDisponibles || 0;
+  });
 };
 
-const loadMoreItems = (ev?: any) => {
-  const nextBatch = allBoletas.value.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  displayedBoletas.value = [...displayedBoletas.value, ...nextBatch];
-  currentPage++;
-  
-  if (ev) ev.target.complete();
+const loadMoreItems = async (ev?: any) => {
+  try {
+    if (allLoaded.value || !lastVisible) {
+      if (ev) ev.target.complete();
+      return;
+    }
+
+    const nextQ = query(
+      collection(db, 'boletas_disponibles'),
+      orderBy('numero', 'asc'),
+      startAfter(lastVisible),
+      limit(PAGE_SIZE)
+    );
+
+    const snap = await getDocs(nextQ);
+    const nextBatch = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    displayedBoletas.value = [...displayedBoletas.value, ...nextBatch];
+
+    lastVisible = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : lastVisible;
+    allLoaded.value = snap.docs.length < PAGE_SIZE;
+  } finally {
+    if (ev) ev.target.complete();
+  }
 };
 
 const doRefresh = (event: any) => {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
+  if (unsubscribeDisponibles) {
+    unsubscribeDisponibles();
+    unsubscribeDisponibles = null;
   }
+  if (unsubscribeStats) {
+    unsubscribeStats();
+    unsubscribeStats = null;
+  }
+  fallbackHydrated = false;
   iniciarListener();
   setTimeout(() => event.target.complete(), 1000);
 };
@@ -152,7 +186,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (unsubscribe) unsubscribe();
+  if (unsubscribeDisponibles) unsubscribeDisponibles();
+  if (unsubscribeStats) unsubscribeStats();
 });
 </script>
 

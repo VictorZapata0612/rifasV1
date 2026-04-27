@@ -42,6 +42,7 @@ import { personOutline, businessOutline } from 'ionicons/icons';
 import { db } from '../firebase/config';
 import { doc, setDoc, deleteDoc, collection, addDoc, onSnapshot, query, orderBy, Unsubscribe } from 'firebase/firestore';
 import { Haptics, NotificationType } from '@capacitor/haptics';
+import { normalizeText } from '../utils/text';
 
 const props = defineProps({
   vendedor: {
@@ -76,10 +77,16 @@ const guardar = async () => {
   if (!form.value.nombre || !form.value.id_socio) return;
   loading.value = true;
   try {
+    const payload = {
+      nombre: form.value.nombre.trim(),
+      nombre_normalizado: normalizeText(form.value.nombre),
+      id_socio: form.value.id_socio,
+    };
+
     if (props.vendedor) {
-      await setDoc(doc(db, 'vendedores', props.vendedor.id), { ...form.value }, { merge: true });
+      await setDoc(doc(db, 'vendedores', props.vendedor.id), payload, { merge: true });
     } else {
-      await addDoc(collection(db, 'vendedores'), { ...form.value });
+      await addDoc(collection(db, 'vendedores'), { ...payload, boletasAsignadas: 0 });
     }
     modalController.dismiss({ role: 'reload' });
     await Haptics.notification({ type: NotificationType.Success });

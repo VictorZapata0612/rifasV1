@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isBoletaId(id) {
+      return id.matches('^[0-9]{4}$');
+    }
+
+    function isValidName(value) {
+      return value is string && value.size() > 0 && value.size() <= 80;
+    }
+
+    function isValidNormalizedName(value) {
+      return value is string && value.size() > 0 && value.size() <= 80;
+    }
+
+    function hasValidCounter(data) {
+      return !data.keys().hasAny(['boletasAsignadas']) ||
+        (data.boletasAsignadas is int && data.boletasAsignadas >= 0);
+    }
+
+    match /socios/{socioId} {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['nombre', 'nombre_normalizado', 'boletasAsignadas']) &&
+        isValidName(request.resource.data.nombre) &&
+        (!request.resource.data.keys().hasAny(['nombre_normalizado']) ||
+          isValidNormalizedName(request.resource.data.nombre_normalizado)) &&
+        hasValidCounter(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /vendedores/{vendedorId} {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['nombre', 'nombre_normalizado', 'id_socio', 'boletasAsignadas']) &&
+        isValidName(request.resource.data.nombre) &&
+        (!request.resource.data.keys().hasAny(['nombre_normalizado']) ||
+          isValidNormalizedName(request.resource.data.nombre_normalizado)) &&
+        request.resource.data.id_socio is string &&
+        request.resource.data.id_socio.size() > 0 &&
+        hasValidCounter(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /boletas/{numero} {
+      allow read: if true;
+      allow create, update: if
+        isBoletaId(numero) &&
+        request.resource.data.keys().hasOnly([
+          'numero',
+          'estado',
+          'vendedorId',
+          'vendedorNombre',
+          'socioId',
+          'fechaAsignacion',
+          'fechaModificacion'
+        ]) &&
+        request.resource.data.numero == numero &&
+        request.resource.data.estado in ['disponible', 'asignada'];
+      allow delete: if true;
+    }
+
+    match /boletas_disponibles/{numero} {
+      allow read: if true;
+      allow create, update: if
+        isBoletaId(numero) &&
+        request.resource.data.keys().hasOnly(['numero', 'updatedAt']) &&
+        request.resource.data.numero == numero;
+      allow delete: if true;
+    }
+
+    match /stats/inventario {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['total', 'totalAsignadas', 'totalDisponibles', 'updatedAt']) &&
+        request.resource.data.total is int && request.resource.data.total > 0 &&
+        request.resource.data.totalAsignadas is int && request.resource.data.totalAsignadas >= 0 &&
+        request.resource.data.totalDisponibles is int && request.resource.data.totalDisponibles >= 0;
+      allow delete: if false;
+    }
+  }
+}

@@ -36,6 +36,7 @@ import { personOutline } from 'ionicons/icons';
 import { db } from '../firebase/config';
 import { doc, setDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
 import { Haptics, NotificationType } from '@capacitor/haptics';
+import { normalizeText } from '../utils/text';
 
 const props = defineProps({
   socio: {
@@ -55,12 +56,17 @@ const guardar = async () => {
   if (!form.value.nombre) return;
   loading.value = true;
   try {
+    const payload = {
+      nombre: form.value.nombre.trim(),
+      nombre_normalizado: normalizeText(form.value.nombre),
+    };
+
     if (props.socio) {
       // Editar
-      await setDoc(doc(db, 'socios', props.socio.id), { ...form.value }, { merge: true });
+      await setDoc(doc(db, 'socios', props.socio.id), payload, { merge: true });
     } else {
       // Crear
-      await addDoc(collection(db, 'socios'), { ...form.value, boletasAsignadas: 0 });
+      await addDoc(collection(db, 'socios'), { ...payload, boletasAsignadas: 0 });
     }
     modalController.dismiss({ role: 'reload' });
     await Haptics.notification({ type: NotificationType.Success });

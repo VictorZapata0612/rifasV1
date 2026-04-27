@@ -108,6 +108,7 @@ const historial = ref<any[]>([]); // Para el feedback visual
 const inputBoleta = ref();
 let unsubscribeSocios: Unsubscribe | null = null;
 let unsubscribeVendedores: Unsubscribe | null = null;
+const TOTAL_BOLETAS = 10000;
 
 // --- Métodos ---
 
@@ -222,13 +223,28 @@ const guardarBoleta = async () => {
     await runTransaction(db, async (transaction) => {
       // 1. Leer estado actual de la boleta (Lectura atómica)
       const currentBoleta = await transaction.get(boletaRef);
+      const previousData = currentBoleta.exists() ? currentBoleta.data() : null;
+      const previousEstado = previousData?.estado || 'disponible';
+      const oldSocioId = previousData?.socioId || null;
+      const oldVendedorId = previousData?.vendedorId || null;
+      const newSocioId = vendedor?.id_socio || null;
+      const newVendedorId = vendedorSeleccionado.value;
+      const statsRef = doc(db, 'stats', 'inventario');
+      const disponibleRef = doc(db, 'boletas_disponibles', numero);
+      const statsSnap = await transaction.get(statsRef);
+      const currentAssigned = statsSnap.exists() ? (statsSnap.data().totalAsignadas || 0) : 0;
+      const currentAvailable = statsSnap.exists() ? (statsSnap.data().totalDisponibles || TOTAL_BOLETAS) : TOTAL_BOLETAS;
       
       // 2. Si ya existía y tenía dueño, restar al anterior (Manejo de reasignación)
-      if (currentBoleta.exists()) {
-        const data = currentBoleta.data();
-        if (data.socioId && data.socioId !== 'Sin Socio') {
-          const oldSocioRef = doc(db, 'socios', data.socioId);
+      if (previousEstado === 'asignada') {
+        if (oldSocioId && oldSocioId !== 'Sin Socio' && oldSocioId !== newSocioId) {
+          const oldSocioRef = doc(db, 'socios', oldSocioId);
           transaction.update(oldSocioRef, { boletasAsignadas: increment(-1) });
+        }
+
+        if (oldVendedorId && oldVendedorId !== newVendedorId) {
+          const oldVendedorRef = doc(db, 'vendedores', oldVendedorId);
+          transaction.update(oldVendedorRef, { boletasAsignadas: increment(-1) });
         }
       }
 
@@ -243,9 +259,25 @@ const guardarBoleta = async () => {
       });
 
       // 4. Sumar al nuevo dueño
-      if (vendedor?.id_socio) {
-        const newSocioRef = doc(db, 'socios', vendedor.id_socio);
+      if (newSocioId && oldSocioId !== newSocioId) {
+        const newSocioRef = doc(db, 'socios', newSocioId);
         transaction.update(newSocioRef, { boletasAsignadas: increment(1) });
+      }
+
+      if (oldVendedorId !== newVendedorId) {
+        const newVendedorRef = doc(db, 'vendedores', newVendedorId);
+        transaction.update(newVendedorRef, { boletasAsignadas: increment(1) });
+      }
+
+      // 5. Materializar inventario: al asignar, la boleta deja de estar disponible
+      transaction.delete(disponibleRef);
+      if (previousEstado !== 'asignada') {
+        transaction.set(statsRef, {
+          total: TOTAL_BOLETAS,
+          totalAsignadas: currentAssigned + 1,
+          totalDisponibles: Math.max(0, currentAvailable - 1),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
       }
     });
 
@@ -308,11 +340,22 @@ const procesarReversion = async (numero: string, index: number) => {
 
       const data = boletaDoc.data();
       if (data.estado !== 'asignada') throw "La boleta ya no está asignada.";
+      const statsRef = doc(db, 'stats', 'inventario');
+      const disponibleRef = doc(db, 'boletas_disponibles', numero);
+      const statsSnap = await transaction.get(statsRef);
+      const currentAssigned = statsSnap.exists() ? (statsSnap.data().totalAsignadas || 0) : 0;
+      const currentAvailable = statsSnap.exists() ? (statsSnap.data().totalDisponibles || TOTAL_BOLETAS) : TOTAL_BOLETAS;
 
       // Restar al socio actual
       if (data.socioId && data.socioId !== 'Sin Socio') {
         const socioRef = doc(db, 'socios', data.socioId);
         transaction.update(socioRef, { boletasAsignadas: increment(-1) });
+      }
+
+      // Restar al vendedor actual
+      if (data.vendedorId) {
+        const vendedorRef = doc(db, 'vendedores', data.vendedorId);
+        transaction.update(vendedorRef, { boletasAsignadas: increment(-1) });
       }
 
       // Resetear boleta
@@ -323,6 +366,19 @@ const procesarReversion = async (numero: string, index: number) => {
         socioId: null,
         fechaAsignacion: null
       });
+
+      // Materializar inventario: al liberar, vuelve a disponibles
+      transaction.set(disponibleRef, {
+        numero,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      transaction.set(statsRef, {
+        total: TOTAL_BOLETAS,
+        totalAsignadas: Math.max(0, currentAssigned - 1),
+        totalDisponibles: currentAvailable + 1,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
     });
 
     // Actualizar UI

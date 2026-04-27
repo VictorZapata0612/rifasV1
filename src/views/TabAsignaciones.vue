@@ -114,7 +114,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonList, IonItem, IonLabel, IonAvatar, IonIcon, IonButtons, IonButton, IonListHeader, IonBadge, IonInfiniteScroll, IonInfiniteScrollContent, IonNote, IonRefresher, IonRefresherContent, IonSkeletonText, IonItemGroup, IonItemDivider } from '@ionic/vue';
 import { arrowBack, person, ticketOutline, chevronDown, chevronForward } from 'ionicons/icons';
 import { db } from '../firebase/config';
-import { collection, onSnapshot, query, where, orderBy, getCountFromServer, Unsubscribe, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, Unsubscribe, limit } from 'firebase/firestore';
 import { appStore } from '../store/appStore';
 
 // Estado
@@ -141,7 +141,6 @@ const allBoletasLoaded = ref(false);
 // Suscripciones
 let unsubscribeSocios: Unsubscribe | null = null;
 let unsubscribeNivel: Unsubscribe | null = null; // Para vendedores o boletas
-let unsubscribeBoletasSocio: Unsubscribe | null = null; // Para conteo en tiempo real (Nivel 1)
 
 const tituloActual = computed(() => {
   if (level.value === 0) return 'Lista de Socios';
@@ -207,17 +206,12 @@ onMounted(async () => {
   try {
     const q = query(collection(db, 'socios'), orderBy('nombre'));
     
-    unsubscribeSocios = onSnapshot(q, async (snap: any) => {
-      const listaSocios = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-      
-      // Calcular suma de boletas de sus vendedores (Dinámico para exactitud)
-      const promises = listaSocios.map(async (s: any) => {
-        const qCount = query(collection(db, 'boletas'), where('socioId', '==', s.id));
-        const snapCount = await getCountFromServer(qCount);
-        return { ...s, boletasAsignadas: snapCount.data().count };
-      });
-
-      socios.value = await Promise.all(promises);
+    unsubscribeSocios = onSnapshot(q, (snap: any) => {
+      socios.value = snap.docs.map((d: any) => ({
+        id: d.id,
+        ...d.data(),
+        boletasAsignadas: d.data().boletasAsignadas || 0,
+      }));
       appStore.socios = socios.value; // Actualizar caché
       loading.value = false;
     });
@@ -229,7 +223,6 @@ onMounted(async () => {
 onUnmounted(() => {
   if (unsubscribeSocios) unsubscribeSocios();
   if (unsubscribeNivel) unsubscribeNivel();
-  if (unsubscribeBoletasSocio) unsubscribeBoletasSocio();
 });
 
 // Navegación
@@ -237,7 +230,6 @@ const seleccionarSocio = async (socio: any) => {
   selectedSocio.value = socio;
   
   if (unsubscribeNivel) unsubscribeNivel();
-  if (unsubscribeBoletasSocio) { unsubscribeBoletasSocio(); unsubscribeBoletasSocio = null; }
 
   // Cache-First para Vendedores
   if (appStore.vendedoresCache[socio.id]) {
@@ -247,43 +239,21 @@ const seleccionarSocio = async (socio: any) => {
   }
 
   try {
-    // 1. Traer vendedores del socio (Lista en tiempo real)
+    // Traer vendedores del socio (Lista en tiempo real)
     const q = query(collection(db, 'vendedores'), where('id_socio', '==', socio.id), orderBy('nombre'));
     
-    // 2. Traer boletas del socio (Conteo en tiempo real)
-    const qBoletas = query(collection(db, 'boletas'), where('socioId', '==', socio.id));
-
-    let localVendedores: any[] = [];
-    let localBoletas: any[] = [];
-    let isVendedoresLoaded = false;
-    let isBoletasLoaded = false;
-
-    const updateState = () => {
-      if (!isVendedoresLoaded || !isBoletasLoaded) return;
-
-      const counts: Record<string, number> = {};
-      localBoletas.forEach(b => {
-        if (b.vendedorId) counts[b.vendedorId] = (counts[b.vendedorId] || 0) + 1;
-      });
-
-      vendedores.value = localVendedores.map(v => ({ ...v, boletasCount: counts[v.id] || 0 }));
-      appStore.vendedoresCache[socio.id] = vendedores.value; // Guardar en caché
-      loading.value = false;
-    };
-    
     unsubscribeNivel = onSnapshot(q, (snap: any) => {
-      localVendedores = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      const localVendedores = snap.docs.map((d: any) => ({
+        id: d.id,
+        ...d.data(),
+        boletasCount: d.data().boletasAsignadas || 0,
+      }));
+
       // Ordenamiento Natural (Numeric Sort)
       localVendedores.sort((a: any, b: any) => a.nombre.localeCompare(b.nombre, undefined, { numeric: true, sensitivity: 'base' }));
-      
-      isVendedoresLoaded = true;
-      updateState();
-    });
-
-    unsubscribeBoletasSocio = onSnapshot(qBoletas, (snap: any) => {
-      localBoletas = snap.docs.map((d: any) => d.data());
-      isBoletasLoaded = true;
-      updateState();
+      vendedores.value = localVendedores;
+      appStore.vendedoresCache[socio.id] = vendedores.value; // Guardar en caché
+      loading.value = false;
     });
 
     level.value = 1;
@@ -295,7 +265,6 @@ const seleccionarSocio = async (socio: any) => {
 // Lógica de suscripción a boletas con paginación
 const suscribirBoletas = (isInitial: boolean, ev?: any) => {
   if (unsubscribeNivel) unsubscribeNivel();
-  if (unsubscribeBoletasSocio) { unsubscribeBoletasSocio(); unsubscribeBoletasSocio = null; }
 
   const vendedorId = selectedVendedor.value.id;
 
@@ -363,7 +332,6 @@ const goBack = () => {
   } else if (level.value === 1) {
     level.value = 0;
     if (unsubscribeNivel) { unsubscribeNivel(); unsubscribeNivel = null; }
-    if (unsubscribeBoletasSocio) { unsubscribeBoletasSocio(); unsubscribeBoletasSocio = null; }
     selectedSocio.value = null;
   }
 };

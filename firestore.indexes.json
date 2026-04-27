@@ -1,0 +1,35 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "vendedores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "id_socio", "order": "ASCENDING" },
+        { "fieldPath": "nombre", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "boletas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vendedorId", "order": "ASCENDING" },
+        { "fieldPath": "numero", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "vendedores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nombre_normalizado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "socios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nombre_normalizado", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

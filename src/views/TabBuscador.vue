@@ -133,6 +133,7 @@ import { collection, doc, getDoc, getDocs, query, where, orderBy, limit } from '
 import ModalAdminBoleta from '../components/ModalAdminBoleta.vue';
 import ModalAdminSocio from '../components/ModalAdminSocio.vue';
 import ModalAdminVendedor from '../components/ModalAdminVendedor.vue';
+import { normalizeText } from '../utils/text';
 
 const searchQuery = ref('');
 const filtroTipo = ref('todos');
@@ -145,6 +146,7 @@ const resultadoBoleta = ref<any>(null);
 const resultadosRango = ref<any[]>([]);
 const resultadosPersonas = ref<any[]>([]);
 const rangeLabel = ref('');
+const MAX_TEXT_RESULTS = 50;
 
 const limpiar = () => {
   searchQuery.value = '';
@@ -154,6 +156,8 @@ const limpiar = () => {
   busquedaRealizada.value = false;
   isNumericSearch.value = false;
 };
+
+const buildPrefixUpperBound = (term: string) => `${term}\uf8ff`;
 
 const handleSearch = async (event: any) => {
   const val = event.detail ? event.detail.value : searchQuery.value;
@@ -208,26 +212,48 @@ const handleSearch = async (event: any) => {
     } else {
       // 3. Búsqueda de Texto (Personas)
       isNumericSearch.value = false;
-      const term = val.toLowerCase();
+      const term = normalizeText(val);
+      if (term.length < 2) {
+        busquedaRealizada.value = true;
+        return;
+      }
+
       const promises = [];
 
       if (filtroTipo.value === 'todos' || filtroTipo.value === 'vendedores') {
-        promises.push(getDocs(collection(db, 'vendedores')).then(snap => 
-          snap.docs.map(d => ({ id: d.id, ...d.data(), tipo: 'Vendedor' }))
-        ));
+        const vendedoresQ = query(
+          collection(db, 'vendedores'),
+          where('nombre_normalizado', '>=', term),
+          where('nombre_normalizado', '<=', buildPrefixUpperBound(term)),
+          orderBy('nombre_normalizado', 'asc'),
+          limit(MAX_TEXT_RESULTS)
+        );
+
+        promises.push(
+          getDocs(vendedoresQ).then(snap =>
+            snap.docs.map(d => ({ id: d.id, ...d.data(), tipo: 'Vendedor' }))
+          )
+        );
       }
+
       if (filtroTipo.value === 'todos' || filtroTipo.value === 'socios') {
-        promises.push(getDocs(collection(db, 'socios')).then(snap => 
-          snap.docs.map(d => ({ id: d.id, ...d.data(), tipo: 'Socio' }))
-        ));
+        const sociosQ = query(
+          collection(db, 'socios'),
+          where('nombre_normalizado', '>=', term),
+          where('nombre_normalizado', '<=', buildPrefixUpperBound(term)),
+          orderBy('nombre_normalizado', 'asc'),
+          limit(MAX_TEXT_RESULTS)
+        );
+
+        promises.push(
+          getDocs(sociosQ).then(snap =>
+            snap.docs.map(d => ({ id: d.id, ...d.data(), tipo: 'Socio' }))
+          )
+        );
       }
 
       const results = await Promise.all(promises);
-      const flatResults = results.flat();
-      
-      resultadosPersonas.value = flatResults.filter((p: any) => 
-        p.nombre && p.nombre.toLowerCase().includes(term)
-      );
+      resultadosPersonas.value = results.flat();
     }
 
   } catch (error) {
