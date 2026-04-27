@@ -342,3 +342,37 @@ const doRefresh = (event: any) => {
   setTimeout(() => event.target.complete(), 1000);
 };
 </script>
+
+<style scoped>
+ion-list-header h1 {
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+  font-size: 1.42rem;
+  letter-spacing: 0.01em;
+}
+
+ion-list-header p {
+  color: var(--ion-color-medium);
+}
+
+ion-item-divider {
+  --background: color-mix(in srgb, var(--ion-color-primary) 14%, var(--ion-card-background));
+  border: 1px solid color-mix(in srgb, var(--ion-color-primary) 20%, transparent);
+  border-radius: 12px;
+  margin: 8px 10px;
+}
+
+ion-item-divider ion-label {
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+  font-weight: 700;
+  color: var(--ion-color-primary);
+}
+
+ion-note {
+  display: inline-block;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--ion-color-light) 70%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--ion-color-medium) 50%, transparent);
+  border-radius: 12px;
+}
+</style>

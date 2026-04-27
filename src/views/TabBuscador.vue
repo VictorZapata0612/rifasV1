@@ -2,16 +2,20 @@
   <ion-page>
     <ion-header>
       <ion-toolbar color="primary">
-        <ion-title>Buscador Global</ion-title>
+        <ion-title>Buscador Inteligente</ion-title>
       </ion-toolbar>
     </ion-header>
     <ion-content :fullscreen="true">
+      <div class="search-hero ion-padding-horizontal ion-padding-top">
+        <h2>Encuentra en segundos</h2>
+        <p>Boletas por número o rango, y personas por nombre.</p>
+      </div>
       
       <div class="ion-padding-start ion-padding-end ion-padding-top">
         <ion-searchbar 
           v-model="searchQuery" 
           animated 
-          placeholder="Boleta (0000), Rango (0-50) o Nombre..." 
+          placeholder="Ejemplo: 0042, 0100-0200, Martha" 
           @ionChange="handleSearch"
           @ionClear="limpiar"
           :debounce="600"
@@ -19,9 +23,8 @@
         ></ion-searchbar>
       </div>
 
-      <!-- Filtros (Solo si no es búsqueda numérica) -->
       <div class="ion-padding-horizontal ion-margin-bottom" v-if="!isNumericSearch">
-        <ion-segment v-model="filtroTipo" @ionChange="handleSearch" scrollable>
+        <ion-segment v-model="filtroTipo" @ionChange="handleSearch" scrollable class="search-segment">
           <ion-segment-button value="todos">
             <ion-label>Todos</ion-label>
           </ion-segment-button>
@@ -38,7 +41,7 @@
       <div v-if="loading" class="ion-text-center ion-padding">
         <ion-list>
           <ion-item v-for="n in 3" :key="n">
-            <ion-icon :icon="person" slot="start" color="light"></ion-icon>
+            <ion-icon :icon="person" slot="start" color="medium"></ion-icon>
             <ion-label>
               <h2><ion-skeleton-text animated style="width: 50%"></ion-skeleton-text></h2>
               <p><ion-skeleton-text animated style="width: 30%"></ion-skeleton-text></p>
@@ -50,12 +53,11 @@
       <!-- Resultados -->
       <div v-else class="ion-padding-bottom">
         
-        <!-- 1. Resultado Boleta Única -->
         <div v-if="resultadoBoleta" class="ion-padding-horizontal ion-margin-bottom">
-          <ion-card class="ion-no-margin">
+          <ion-card class="ion-no-margin result-card">
             <ion-card-header>
               <ion-card-title class="ion-text-center">Boleta #{{ resultadoBoleta.numero }}</ion-card-title>
-              <ion-card-subtitle class="ion-text-center">{{ resultadoBoleta.vendedorNombre }}</ion-card-subtitle>
+              <ion-card-subtitle class="ion-text-center">{{ resultadoBoleta.vendedorNombre || 'Sin vendedor asignado' }}</ion-card-subtitle>
             </ion-card-header>
             <ion-card-content>
               <ion-list lines="none">
@@ -67,30 +69,29 @@
                   </ion-label>
                 </ion-item>
                 <ion-item>
-                  <ion-label>Estado</ion-label>
+                  <ion-label>Estado actual</ion-label>
                   <ion-badge slot="end" :color="resultadoBoleta.estado === 'asignada' ? 'warning' : 'success'">
                     {{ resultadoBoleta.estado ? resultadoBoleta.estado.toUpperCase() : 'SIN ESTADO' }}
                   </ion-badge>
                 </ion-item>
               </ion-list>
               <div class="ion-text-center ion-margin-top">
-                 <ion-button fill="outline" @click="abrirModalBoleta(resultadoBoleta)">Ver Detalles</ion-button>
+                 <ion-button fill="outline" @click="abrirModalBoleta(resultadoBoleta)">Abrir detalle</ion-button>
               </div>
             </ion-card-content>
           </ion-card>
         </div>
 
-        <!-- 2. Resultados Rango -->
         <div v-if="resultadosRango.length > 0">
           <ion-list-header>
-            <ion-label>Rango: {{ rangeLabel }} ({{ resultadosRango.length }})</ion-label>
+            <ion-label>Rango {{ rangeLabel }} · {{ resultadosRango.length }} resultados</ion-label>
           </ion-list-header>
           <ion-list>
             <ion-item v-for="boleta in resultadosRango" :key="boleta.id" button @click="abrirModalBoleta(boleta)">
               <ion-icon :icon="ticketOutline" slot="start" color="tertiary"></ion-icon>
               <ion-label>
-                <h2>#{{ boleta.numero }} - {{ boleta.vendedorNombre }}</h2>
-                <p>{{ boleta.socioId ? 'Socio: ' + boleta.socioId : 'Sin Socio' }}</p>
+                <h2>#{{ boleta.numero }} · {{ boleta.vendedorNombre || 'Sin vendedor' }}</h2>
+                <p>{{ boleta.socioId ? 'Socio: ' + boleta.socioId : 'Sin socio asociado' }}</p>
               </ion-label>
               <ion-badge slot="end" :color="boleta.estado === 'asignada' ? 'warning' : 'success'">
                 {{ boleta.estado }}
@@ -99,10 +100,9 @@
           </ion-list>
         </div>
 
-        <!-- 3. Resultados Personas -->
         <ion-list v-if="resultadosPersonas.length > 0">
           <ion-list-header>
-            <ion-label>Personas Encontradas</ion-label>
+            <ion-label>Personas encontradas</ion-label>
           </ion-list-header>
           <ion-item v-for="p in resultadosPersonas" :key="p.id" button detail @click="abrirModalPersona(p)">
             <ion-icon :icon="p.tipo === 'Vendedor' ? person : business" slot="start"></ion-icon>
@@ -114,9 +114,13 @@
           </ion-item>
         </ion-list>
 
-        <!-- Empty State -->
-        <div v-if="busquedaRealizada && !resultadoBoleta && resultadosRango.length === 0 && resultadosPersonas.length === 0" class="ion-text-center ion-padding ion-text-muted">
-          <p>No se encontraron resultados.</p>
+        <div v-if="shortQuery && !isNumericSearch" class="ion-padding-horizontal ion-padding-top">
+          <ion-note color="medium">Escribe al menos 2 letras para buscar personas por nombre.</ion-note>
+        </div>
+
+        <div v-if="busquedaRealizada && !shortQuery && !resultadoBoleta && resultadosRango.length === 0 && resultadosPersonas.length === 0" class="ion-text-center ion-padding ion-text-muted empty-state">
+          <h3>Sin coincidencias</h3>
+          <p>Prueba con otro número, rango o nombre.</p>
         </div>
 
       </div>
@@ -126,7 +130,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonSearchbar, IonSegment, IonSegmentButton, IonLabel, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonList, IonItem, IonIcon, IonBadge, IonButton, IonListHeader, modalController, IonSkeletonText } from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonSearchbar, IonSegment, IonSegmentButton, IonLabel, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonList, IonItem, IonIcon, IonBadge, IonButton, IonListHeader, modalController, IonSkeletonText, IonNote } from '@ionic/vue';
 import { person, ticketOutline, business } from 'ionicons/icons';
 import { db } from '../firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
@@ -140,6 +144,7 @@ const filtroTipo = ref('todos');
 const loading = ref(false);
 const busquedaRealizada = ref(false);
 const isNumericSearch = ref(false);
+const shortQuery = ref(false);
 
 // Resultados
 const resultadoBoleta = ref<any>(null);
@@ -155,6 +160,7 @@ const limpiar = () => {
   resultadosPersonas.value = [];
   busquedaRealizada.value = false;
   isNumericSearch.value = false;
+  shortQuery.value = false;
 };
 
 const buildPrefixUpperBound = (term: string) => `${term}\uf8ff`;
@@ -180,6 +186,7 @@ const handleSearch = async (event: any) => {
 
     if (rangeMatch) {
       isNumericSearch.value = true;
+      shortQuery.value = false;
       const start = rangeMatch[1].padStart(4, '0');
       const end = rangeMatch[2].padStart(4, '0');
       rangeLabel.value = `${start} - ${end}`;
@@ -196,6 +203,7 @@ const handleSearch = async (event: any) => {
 
     } else if (isBoleta) {
       isNumericSearch.value = true;
+      shortQuery.value = false;
       const docRef = doc(db, 'boletas', val);
       const snap = await getDoc(docRef);
       
@@ -210,13 +218,14 @@ const handleSearch = async (event: any) => {
       }
 
     } else {
-      // 3. Búsqueda de Texto (Personas)
       isNumericSearch.value = false;
       const term = normalizeText(val);
       if (term.length < 2) {
+        shortQuery.value = true;
         busquedaRealizada.value = true;
         return;
       }
+      shortQuery.value = false;
 
       const promises = [];
 
@@ -287,3 +296,37 @@ const abrirModalPersona = async (persona: any) => {
   await modal.present();
 };
 </script>
+
+<style scoped>
+.search-hero h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+}
+
+.search-hero p {
+  margin: 4px 0 0;
+  color: var(--ion-color-medium);
+  font-size: 0.86rem;
+}
+
+.search-segment {
+  border-radius: 14px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--ion-color-light) 65%, transparent);
+}
+
+.result-card {
+  border: 1px solid color-mix(in srgb, var(--ion-color-primary) 18%, transparent);
+}
+
+.empty-state h3 {
+  margin: 0;
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+}
+
+.empty-state p {
+  margin-top: 6px;
+  color: var(--ion-color-medium);
+}
+</style>

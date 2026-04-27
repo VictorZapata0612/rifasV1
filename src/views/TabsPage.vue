@@ -131,21 +131,48 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.relative-tab-bar {
+  position: relative;
+  margin: 0 10px 10px;
+  border: 1px solid rgba(130, 161, 203, 0.28);
+  border-radius: 18px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(15, 34, 66, 0.16);
+  overflow: hidden;
+}
+
+.relative-tab-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(21, 101, 216, 0.85), rgba(14, 165, 162, 0.75), rgba(230, 126, 34, 0.8));
+}
+
 .network-indicator {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
+  top: 5px;
+  right: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background-color: var(--ion-color-medium); /* Gris si está offline/desconocido */
-  border: 1px solid var(--ion-tab-bar-background, #fff);
+  background-color: var(--ion-color-medium);
+  border: 2px solid var(--ion-tab-bar-background, #fff);
   z-index: 100;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
 
 .network-indicator.online {
-  background-color: var(--ion-color-success); /* Verde brillante si hay internet */
-  box-shadow: 0 0 6px var(--ion-color-success);
+  background-color: var(--ion-color-success);
+  box-shadow: 0 0 0 3px rgba(20, 153, 90, 0.2);
+}
+
+@media (max-width: 420px) {
+  .relative-tab-bar {
+    margin: 0 8px 8px;
+    border-radius: 16px;
+  }
 }
 </style>

@@ -11,7 +11,7 @@
       </ion-refresher>
 
       <!-- Summary Card -->
-      <div class="ion-padding">
+      <div class="ion-padding available-summary-wrap">
         <ion-card class="summary-card">
           <ion-card-header>
             <ion-card-title>Resumen de Inventario</ion-card-title>
@@ -54,7 +54,7 @@
       </div>
 
       <ion-list v-else>
-        <ion-list-header>
+        <ion-list-header class="available-list-header">
           <ion-label>Listado de Disponibles (Mostrando {{ displayedBoletas.length }} de {{ totalDisponibles }})</ion-label>
         </ion-list-header>
         <ion-item v-for="boleta in displayedBoletas" :key="boleta.id">
@@ -194,8 +194,29 @@ onUnmounted(() => {
 <style scoped>
 .summary-card {
   --background: var(--ion-card-background, #f9f9f9);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: 0 10px 28px rgba(14, 35, 68, 0.14);
+  border: 1px solid color-mix(in srgb, var(--ion-color-primary) 16%, transparent);
 }
+
+.available-summary-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+}
+
+.available-list-header {
+  margin-top: 8px;
+}
+
+.available-list-header ion-label {
+  padding: 6px 12px;
+  border-radius: 999px;
+  display: inline-block;
+  background: color-mix(in srgb, var(--ion-color-primary) 12%, transparent);
+  color: var(--ion-color-primary);
+}
+
 .stat-label {
   font-size: 0.8rem;
   color: var(--ion-color-medium);
@@ -212,5 +233,11 @@ onUnmounted(() => {
 }
 .stat-value.available {
   color: var(--ion-color-success);
+}
+
+@media (max-width: 480px) {
+  .stat-value {
+    font-size: 1.52rem;
+  }
 }
 </style>
