@@ -24,7 +24,7 @@
       </div>
 
       <div class="ion-padding-horizontal ion-margin-bottom" v-if="!isNumericSearch">
-        <ion-segment v-model="filtroTipo" @ionChange="handleSearch" scrollable class="search-segment">
+        <ion-segment v-model="filtroTipo" @ionChange="onSegmentChange" scrollable class="search-segment">
           <ion-segment-button value="todos">
             <ion-label>Todos</ion-label>
           </ion-segment-button>
@@ -165,8 +165,8 @@ const limpiar = () => {
 
 const buildPrefixUpperBound = (term: string) => `${term}\uf8ff`;
 
-const handleSearch = async (event: any) => {
-  const val = event.detail ? event.detail.value : searchQuery.value;
+const handleSearch = async () => {
+  const val = (searchQuery.value || '').trim();
   if (!val) return limpiar();
 
   loading.value = true;
@@ -271,6 +271,11 @@ const handleSearch = async (event: any) => {
     loading.value = false;
     busquedaRealizada.value = true;
   }
+};
+
+const onSegmentChange = async () => {
+  if (!searchQuery.value) return;
+  await handleSearch();
 };
 
 const abrirModalBoleta = async (boleta: any) => {
