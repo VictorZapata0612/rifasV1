@@ -36,3 +36,5 @@ npm-debug.log*
 /android/build
 /android/app/build
 /android/local.properties
+/android/.idea
+*.jks
