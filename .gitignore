@@ -30,3 +30,9 @@ npm-debug.log*
 /platforms
 /plugins
 /www
+
+# Android build artifacts and local machine config
+/android/.gradle
+/android/build
+/android/app/build
+/android/local.properties

@@ -1,31 +1,40 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
-import { RouteRecordRaw } from 'vue-router';
-import TabsPage from '../views/TabsPage.vue'
+import TabsPage from '@/views/TabsPage.vue';
 
-const routes: Array<RouteRecordRaw> = [
+
+const routes = [
   {
     path: '/',
-    redirect: '/tabs/tab1'
+    redirect: '/tabs/carga' // Redirigir raíz a Carga
   },
   {
-    path: '/tabs/',
+    path: '/tabs',
     component: TabsPage,
     children: [
       {
         path: '',
-        redirect: '/tabs/tab1'
+        redirect: '/tabs/carga'
       },
       {
-        path: 'tab1',
-        component: () => import('@/views/Tab1Page.vue')
+        path: 'carga',
+        // Carga perezosa (Lazy loading) para mejor rendimiento
+        component: () => import('../views/TabCarga.vue')
       },
       {
-        path: 'tab2',
-        component: () => import('@/views/Tab2Page.vue')
+        path: 'buscador',
+        component: () => import('../views/TabBuscador.vue')
       },
       {
-        path: 'tab3',
-        component: () => import('@/views/Tab3Page.vue')
+        path: 'asignaciones',
+        component: () => import('../views/TabAsignaciones.vue')
+      },
+      {
+        path: 'disponibles',
+        component: () => import('../views/TabDisponibles.vue')
+      },
+      {
+        path: 'socios',
+        component: () => import('../views/TabSocios.vue')
       }
     ]
   }
